@@ -216,3 +216,140 @@ As *priorities* disponíveis em ordem de execução são:
 
 Há várias formas de pausar o loop de execução até que uma *task* complete através de trabalho assíncrono.
 O caminho mais fácil é retornar uma Promise. O loop continuará quando a Promise for resolvida, ou levantará uma exceção a parar se a Promise falhar.
+
+## Interações com Usuário
+
+### Prompts
+
+Prompts são a forma principal que um *generator* interage com um usuário. O módulo prompt é provido pelo [Inquirer.js](https://github.com/SBoudrias/Inquirer.js) e você deve utilizar como referência sua API para uma lista de opções de prompt disponíveis.
+
+O método `prompt` é assíncrono e retorna uma Promise. Você precisará retornar a Promise da sua *task* a fim de esperar pela conclusão antes de seguir para a próxima.
+
+```javascript
+module.exports = class extends Generator {
+  async prompting() {
+    const answers = await this.prompt([
+      {
+        type: "input",
+        name: "name",
+        message: "Your project name",
+        default: this.appname // Default to current folder name
+      },
+      {
+        type: "confirm",
+        name: "cool",
+        message: "Would you like to enable the Cool feature?"
+      }
+    ]);
+
+    this.log("app name", answers.name);
+    this.log("cool feature", answers.cool);
+  }
+};
+```
+
+Um cenário muito comum é usar as respostas do usuário em um estágio posterior, por exemplo, durante a execução da *priority* `writing`. Isso pode ser feito facilmente adicionando-as ao contexto `this`:
+
+```javascript
+module.exports = class extends Generator {
+  async prompting() {
+    this.answers = await this.prompt([
+      {
+        type: "confirm",
+        name: "cool",
+        message: "Would you like to enable the Cool feature?"
+      }
+    ]);
+  }
+
+  writing() {
+    this.log("cool feature", this.answers.cool); // user answer `cool` used
+  }
+};
+```
+
+O usuário pode dar a mesma resposta a certas questões toda vez que ele executar seu *generator*. Para essas questões, você provavelmente quer lembrar a resposta dada anteriormente como o nome valor default.
+
+Para isso, marque a propriedade `store` como true.
+
+```javascript
+this.prompt({
+  type: "input",
+  name: "username",
+  message: "What's your GitHub username",
+  store: true
+});
+```
+
+
+### Arguments
+
+Arguments são passados diretamente na linha de comando. No exemplo a seguir, "jujuba" seria o primeiro Argument do generator-aprendizado:
+
+```shell
+yo aprendizado jujuba
+```
+
+Para notificar o sistema que é esperado um Argument, utiliza-se o método `this.argument()`. Esse método aceita uma string com o nome do Argument além de um conjunto de opções.
+
+O Argument "nome" estará então disponível como: `this.options["nome"]`.
+
+As configurações do Argument aceitam múltiplos pares de chaves/valor:
+
+- desc: descrição do Argument
+- required: booleano indicando obrigatoriedade do Argument
+- type: String, Number, Array (pode também ser uma função customizada para receber uma string e parseá-la)
+- default: valor default
+
+Este método deve ser chamado dentro do construtor. Do contrário, Yeoman não conseguirá exibir informação relevante quando o usuário utilizar o help `yo aprendizado --help`.
+
+```javascript
+module.exports = class extends Generator {
+  // note: arguments and options should be defined in the constructor.
+  constructor(args, opts) {
+    super(args, opts);
+
+    // This makes `appname` a required argument.
+    this.argument("appname", { type: String, required: true });
+
+    // And you can then access it later; e.g.
+    this.log(this.options.appname);
+  }
+};
+```
+
+### Options
+
+Options se parecem muito com Arguments, mas elas são escritas como *flags* de linha de comando.
+
+```shell
+yo aprendizado --cafe
+```
+
+Para notificar o sistema que é esperado um Option, utiliza-se o método `this.option()`. Esse método aceita uma string com o nome do Option além de um conjunto de opções.
+
+O Option "nome" estará então disponível como: `this.options["nome"]`.
+
+As configurações do Optoin aceitam múltiplos pares de chaves/valor:
+
+- desc: descrição do Option
+- alias: nome curto para o Option
+- type: String, Number, Array (pode também ser uma função customizada para receber uma string e parseá-la)
+- default: valor default
+- hide: booleano que indica se deve ocultá-lo no help
+
+
+```javascript
+module.exports = class extends Generator {
+  // note: arguments and options should be defined in the constructor.
+  constructor(args, opts) {
+    super(args, opts);
+
+    // This method adds support for a `--coffee` flag
+    this.option("cafe");
+
+    // And you can then access it later; e.g.
+    this.scriptSuffix = this.options.coffee ? ".cafe" : ".js";
+  }
+};
+```
