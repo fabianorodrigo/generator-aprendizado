@@ -1,0 +1,16 @@
+{
+  "name": "generator-aprendizado",
+  "version": "1.0.0",
+  "description": "Generator Yeoman apenas para fins de fixação de aprendizado sobre a ferramenta de scaffolding",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "yeoman-generator"
+  ],
+  "author": "Fabiano Nascimento",
+  "license": "ISC",
+  "dependencies": {
+    "yeoman-generator": "^5.9.0"
+  }
+}
