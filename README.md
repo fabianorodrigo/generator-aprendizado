@@ -412,3 +412,47 @@ Quando utilizar peerDependencies, esteja ciente de que outros módulos podem tam
 ```
 
 **Nota:** a partir do npm@3, peerDependencies não são mais instaladas automaticamente. Para instalá-las, elas devem ser instaladas manualmente.
+
+# Gerência de Dependências
+
+Uma vez que você executou seus *generators*, você frequentemente vai querer executar npm, pnpm, yarn ou bower para instalar dependências adicionais que seu *generator* requer.
+
+Como essas ações são muito frequentes, o Yeoman já as abstrai. Note que a funcionalidade de instalação provida é automaticamente agendada para executar como parte da fila de *priorities* `install`. Se você precisar realizar algo após a instalação, utilize a fila `end`.
+
+## npm
+
+Você precisa apenas chamar `this.npmInstall()` para rodar a instalação npm. O Yeoman assegurará que seja executada apenas uma vez mesmo que seja chamada múltiplas vezes por diferentes *generators*.
+
+```javascript
+class extends Generator {
+  installingLodash() {
+    this.npmInstall(['lodash'], { 'save-dev': true });
+  }
+}
+```
+
+Você pode criar ou extender seu `package.json` programaticamente se você não quiser utilizar um template. As ferramentas de file system do Yeoman pode ajudar nisto.
+
+Exemplo em que se define `eslint` como dependência de desenvolvimento e `react` como dependência:
+
+```javascript
+lass extends Generator {
+  writing() {
+    const pkgJson = {
+      devDependencies: {
+        eslint: '^3.15.0'
+      },
+      dependencies: {
+        react: '^16.2.0'
+      }
+    };
+
+    // Extend or create package.json file in destination path
+    this.fs.extendJSON(this.destinationPath('package.json'), pkgJson);
+  }
+
+  install() {
+    this.npmInstall();
+  }
+};
+```
