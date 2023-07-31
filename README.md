@@ -353,3 +353,62 @@ module.exports = class extends Generator {
   }
 };
 ```
+
+# Composibilidade
+
+
+Yeoman oferece múltiplas formas para os *generators* construírem sobre uma base comum. Não faz sentido em reescrever a mesma funcionalidade, assim uma API é provida para utilizar *generators* dentro de outros.
+
+No Yeoman, a composibilidde pode ser inicializada de duas formas:
+
+- um *generator* pode decidir compor ele mesmo com outro *generator*. Por exemplo, generator-backbone utiliza generator-mocha.
+- um usuário final pode também iniciar a composição. Por exemplo, Simon quer gerar um projeto Backbone com SASS e Rails. (composição iniciada por usuário final é uma feature planejada e não está atualmente disponível).
+
+## this.composeWith()
+
+
+O método `composeWith` permite que o *generator* execute lado a lado com outro *generator* (ou *sub-generator*). Desta forma ele pode utilizar funcionalidades do outro *generator* ao invés de ele mesmo ter que fazer tudo ele mesmo.
+
+Ao fazer composição, não se esqueça do que foi falado acima sobre contexto de execução o loop de execução. Em um determinado grupo de *priority* de execução, todos os *generators* compostos irão executar funções naquele grupo. Depois, isso se repetirá para o próximo grupo. A execução entre os *generators* fica na mesma ordem que o  `composeWith` foi chamado.
+
+O método `composeWith` tem 2 parâmetro:
+
+1. `generatorPath`: caminho completo que aponta para o *generator* que você quer compor com (geralmente utilizando `require.resolve()`).
+2. `options`: um objeto contendo opções para passar para o *generator* quando ele executar.
+
+Quando compor com um *generator* `peerDependencies`:
+
+```javascript
+this.composeWith(require.resolve('generator-bootstrap/generators/app'), {preprocessor: 'sass'});
+```
+
+`require.resolve` retorna o caminho de onde o Node.js carregaria o módulo provido.
+
+Tenha em mente que é possível compor com outros *generators* públicos disponíveis no repositório NPM.
+
+Para um exemplo mais complexo, verifique o [generator-generator](https://github.com/yeoman/generator-generator/blob/master/app/index.js) que é composto de [generator-node](https://github.com/yeoman/generator-node). 
+
+## dependencies ou peerDependencies
+
+O npm permite três tipos de dependências:
+
+- dependencies: são instalados localmente no *generator*. É a melhor opção para controlar a versão da dependência utilizada, é a opção preferida.
+- peerDependencies: são instaladas ao longo do *generator*, como um irmão. Por exemplo, se o generator-backbone declara generator-gruntfile como um peerDependency, a árvore de diretórios ficará assim:
+```
+ ├───generator-backbone/
+ └───generator-gruntfile/
+```
+- devDependencies: para funcionalidades de teste e desenvolvimento. Esta não é necessária aqui.
+
+Quando utilizar peerDependencies, esteja ciente de que outros módulos podem também precisar do módulo requisitado. Tome cuidado de não criar versões conflitantes ao requisitar uma versão específica (ou um range estreito de versões). A recomendação do Yeoman com peerDependencies é sempre requisitar uma versão maior ou igual a (>=) or qualquer versão (*) disponível:
+
+```json
+{
+  "peerDependencies": {
+    "generator-gruntfile": "*",
+    "generator-bootstrap": ">=1.0.0"
+  }
+}
+```
+
+**Nota:** a partir do npm@3, peerDependencies não são mais instaladas automaticamente. Para instalá-las, elas devem ser instaladas manualmente.
