@@ -456,3 +456,157 @@ lass extends Generator {
   }
 };
 ```
+
+# Interação com o Sistema de Arquivos
+
+As funcionalidades de arquivo do Yeoman são baseadas na ideia de que você tem dois contexto de localização no disco. Esses contextos são diretórios que seu *generator* mais provavelmente lerá e escreverá.
+
+## Contextos e Caminhos de Localização
+
+### Contexto de destino
+
+O primeiro contexto é o **contexto de destino**. O destino é um diretório no qual o Yeoman irá gerar uma nova aplicação. É o diretório do projeto do desenvolvedor, é onde serão gerados a maioria dos arquivos da aplicação gerada.
+
+O contexto de destino é definido como o diretório corrente ou o diretório pais mais próximo contendo um arquivo `.yo-rc.json`. O arquivo `.yo.rc-json` define a raiz do projeto Yeoman. Esse arquivo permite que o desenvolvedor execute comandos nos subdiretórios e os faça trabalhar juntos no projeto. Isso garante um comportamento consistente para o desenvolvedor.
+
+Pode-se obter o caminho de destino utilizando `this.destinationRoot()` ou juntando o caminho usando `this.destinationPath('sub/path')`.
+
+```javascript
+// Given destination root is ~/projects
+class extends Generator {
+  paths() {
+    this.destinationRoot();
+    // returns '~/projects'
+
+    this.destinationPath('index.js');
+    // returns '~/projects/index.js'
+  }
+}
+```
+
+Também é possível mudá-lo manualmente usando `this.destinationRoot('new/path')`. Mas por uma questão de consistência, você provavelmente não deveria mudar o default.
+
+Se você quer saber de onde o desenvolvedor está executando `yo`, então você pode obter o path com `this.contextRoot`. Este é o caminho de onde `yo` foi invocado.
+
+### Contexto de templates
+
+O contexto de template é o diretório no qual seus arquivos de template estão armazenados. Normalmente é o diretório de onde você lê e copia.
+
+O contexto de template é definido como `./templates` por padrão. Você pode sobreescrever este padrão usando `this.sourceRoot('new/template/path')`.
+
+Você pode obter o valor do caminho utilizando `this.sourceRoot()` ou juntando um path com `this.templatePath('app/index.js')`.
+
+```javascript
+class extends Generator {
+  paths() {
+    this.sourceRoot();
+    // returns './templates'
+
+    this.templatePath('index.js');
+    // returns './templates/index.js'
+  }
+};
+```
+
+## Sistema de arquivos em memória
+
+O Yeoman é muito cuidadoso quando se trata de sobrescrever arquivos de usuários. Basicamente, toda escrita em um arquivo pré-existente passará por um processo de resolução de conflito. Este processo requer que o usuário valide cada escrita que sobrescreve conteúdo de um arquivo.
+
+Esse comportamento previne surpresas ruins e limita o risco de erros. Por outro lado, isso significa que todo arquivo é escrito de forma assíncrona no disco.
+
+Como APIs assíncronas são mais difíceis de usar, o Yeoman provê uma API síncrona de sistema de arquivos onde todos os arquivos são escritos em um [sistema de arquivos em memória](https://github.com/sboudrias/mem-fs) e são somente escritos no disco quando o Yeoman conclui sua execução.
+
+Este sistema de arquivos em memória é compartihado entre todos os *generators*.
+
+## Utilitários de Arquivo
+
+Os *generators* expõem todos os métodos de arquivo através de `this.fs`, que é uma instância de [mem-fs editor](https://github.com/sboudrias/mem-fs-editor).
+
+Vale a pena notar que apesar de  `this.fs` expor o método `commit`, você não deveria chamá-lo no seu *generator*. O Yeoman chama este método internamente depois que o estágio de confitos do loop de execução.
+
+### Exemplo: Cópia de um arquivo de template
+
+Dado o template `./templates/index.html`:
+
+
+```html
+<html>
+  <head>
+    <title><%= title %></title>
+  </head>
+</html>
+```
+
+Usaremos o método `copyTpl` para copiar o arquivo enquanto processamos o seu conteúdo como um template pela sintaxe [EJS](http://ejs.co/).
+
+```javascript
+class extends Generator {
+  writing() {
+    this.fs.copyTpl(
+      this.templatePath('index.html'),
+      this.destinationPath('public/index.html'),
+      { title: 'Templating with Yeoman' }
+    );
+  }
+}
+```
+
+Quando o *generator* finalizar sua execução, o arquivo `public/index.html` terá o seguinte conteúdo:
+
+```html
+<html>
+  <head>
+    <title>Templating with Yeoman</title>
+  </head>
+</html>
+```
+
+Um cenário muito comum é armazenar as respostas do usuário no [estágio de prompting](https://yeoman.io/authoring/user-interactions.html) e usá-las para template:
+
+```javascript
+class extends Generator {
+  async prompting() {
+    this.answers = await this.prompt([{
+      type    : 'input',
+      name    : 'title',
+      message : 'Your project title',
+    }]);
+  }
+
+  writing() {
+    this.fs.copyTpl(
+      this.templatePath('index.html'),
+      this.destinationPath('public/index.html'),
+      { title: this.answers.title } // user answer `title` used
+    );
+  }
+}
+```
+
+## Transformação de arquivos de saída através de streams
+
+O sistema de *generator* permite que você aplique filtros customizados em toda escrita de arquivo. Embelezar arquivos automaticamente, normalizar espaços em branco, etc., é totalmente possível.
+
+Uma vez por processo, escreveremos todos os arquivos modificados no disco. Esse processo é passado através de um objeto de stream [vinyl](https://github.com/wearefractal/vinyl) (exatamente como o [gulp](http://gulpjs.com/)). Qualquer *generator* pode registrar um `transformStream` para modificar o caminho do arquivo e/ou seu conteúdo.
+
+O registro de um modificador é feito através do método `registerTransformStream()`. Por exemplo:
+
+```javascript
+var beautify = require("gulp-beautify");
+this.registerTransformStream(beautify({ indent_size: 2 }));
+```
+Perceba que **todo arquivo de qualquer tipo passará por este stream**. Certifique-se de que qualquer fluxo de transformação passará pelos arquivos incompatíveis. Ferramentas como [gulp-if](https://github.com/robrich/gulp-if) ou [gulp-filter](https://github.com/sindresorhus/gulp-filter) ajudarão a filtrar tipos inválidos e passá-los.
+
+Basicamente, você pode usar qualquer plug-in gulp com o fluxo de transformação Yeoman para processar arquivos gerados durante a fase de gravação.
+
+## Atualização de conteúdo de arquivos existentes
+
+A atualização de arquivos pré-existentes nem sempre é uma tarefa simples. A forma mais confiável de fazê-lo é parsear a AST (abstract syntax tree) do arquivo e editá-la. O principal problema com esta solução é que editar uma AST pode ser verboso e um pouco difícil de compreender.
+
+Alguns parsers de AST populares são:
+
+- [Cheerio](https://github.com/cheeriojs/cheerio) para HTML
+- [Esprima](https://github.com/ariya/esprima) para Javascript
+- Para arquivos JSON, pode-se utilizar os métodos nativos do objeto JSON
+
+Parsear um arquivo de código com RegEx é um caminho perigoso e, antes de fazê-lo, você deveria ler essas [respostas antropológicas](http://stackoverflow.com/questions/1732348/regex-match-open-tags-except-xhtml-self-contained-tags#answer-1732454) e entender as falhas de parse com RegEx. Se você optar por editar os arquivos existentes usando o RegEx em vez da árvore AST, tenha cuidado e forneça testes de unidade completos.
